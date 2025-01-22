@@ -1,0 +1,81 @@
+module(name = "opentitan-external-example")
+
+git_override(
+    module_name = "lowrisc_opentitan",
+    commit = "7940112216880f7826ba614ae83b1c1f1db4998b",
+    remote = "https://github.com/korran/opentitan",
+)
+bazel_dep(name = "lowrisc_opentitan")
+
+bazel_dep(name = "bazel_features", version = "1.23.0")
+bazel_dep(name = "rules_cc", version = "0.0.17")
+
+single_version_override(
+    module_name = "rules_rust",
+    patch_strip = 1,
+    patches = [
+        "//:third_party/patches/rules_rust.extra_rustc_toolchain_dirs.patch",
+    ],
+)
+
+bazel_dep(name = "rules_rust", version = "0.56.0")
+bazel_dep(name = "platforms", version = "0.0.10")
+
+single_version_override(
+    module_name = "rules_rust_bindgen",
+    patch_strip = 3,
+    patches = [
+	# hack for opentitan,
+        "//:third_party/patches/rules_rust.bindgen_static_lib.patch",
+    ],
+)
+bazel_dep(name = "rules_rust_bindgen", version = "0.56.0")
+bazel_dep(name = "toolchains_llvm", version = "1.2.0")
+
+rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+rust.toolchain(
+    edition = "2021",
+    extra_target_triples = [
+        "riscv32imc-unknown-none-elf",
+    ],
+    versions = [
+	# TODO: Switch back to stable once opentitan removes unstable min_specialization feature.
+	"nightly/2025-01-15",
+    ],
+)
+use_repo(rust, "rust_toolchains")
+
+register_toolchains("@rust_toolchains//:all")
+register_toolchains("//:bindgen_toolchain")
+
+llvm = use_extension("@toolchains_llvm//toolchain/extensions:llvm.bzl", "llvm")
+llvm.toolchain(
+    name = "llvm_toolchain",
+    llvm_versions = {"": "18.1.8"},
+    sha256 = {"": "54ec30358afcc9fb8aa74307db3046f5187f9fb89fb37064cdde906e062ebf36"},
+    strip_prefix = {"": "clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04"},
+    urls = {"": ["https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz"]},
+)
+use_repo(llvm, "llvm_toolchain_llvm")
+
+single_version_override(
+    module_name = "toolchains_llvm",
+    patch_strip = 1,
+    patches = [
+        "//:third_party/patches/toolchains_llvm.ignore_non_roots.patch",
+    ],
+)
+
+bazel_dep(name = "rules_python", version = "0.40.0")
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(
+    # Required because CI containers currently run as the `root` user.
+    # We lose caching of `.pyc` files as a result.
+    # See <https://github.com/bazelbuild/rules_python/pull/713>.
+    ignore_root_user_error = True,
+    is_default = True,
+    python_version = "3.9",
+)
+use_repo(python, "pythons_hub")
+register_toolchains("@pythons_hub//:all")
+
